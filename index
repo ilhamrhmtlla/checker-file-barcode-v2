@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Verifikasi Barcode Gudang PBF — Accurate & iPos</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+
+        .app-header { text-align: center; margin-bottom: 20px; }
+        .app-header h2 { color: #2c3e50; margin: 0 0 10px; }
+        .format-badges { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+        .badge { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: .5px; }
+        .badge-accurate { background: #eaf2f8; color: #1f618d; border: 1px solid #aed6f1; }
+        .badge-ipos { background: #fef9e7; color: #9a7d0a; border: 1px solid #f7dc6f; }
+        .badge-auto { background: #e8f8f5; color: #117a65; border: 1px solid #a3e4d7; }
+
+        #statusBox { position: sticky; top: 10px; z-index: 50; padding: 20px; font-size: 20px; font-weight: bold; text-align: center; border-radius: 8px; margin-bottom: 20px; color: white; background: #7f8c8d; transition: background 0.3s; box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+        .bg-ready { background-color: #34495e !important; }
+        .bg-success { background-color: #27ae60 !important; }
+        .bg-warn { background-color: #e67e22 !important; }
+        .bg-error { background-color: #c0392b !important; }
+
+        .summary-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .chip { flex: 1; min-width: 150px; background: #f8f9fa; border: 1px solid #e5e8ec; border-radius: 10px; padding: 10px 14px; }
+        .chip-label { display: block; font-size: 11px; text-transform: uppercase; color: #7f8c8d; letter-spacing: .5px; margin-bottom: 2px; }
+        .chip-value { font-size: 19px; font-weight: 800; color: #2c3e50; }
+
+        .progress-track { height: 10px; background: #eaecee; border-radius: 6px; overflow: hidden; margin-bottom: 20px; }
+        .progress-fill { height: 100%; width: 0%; background: #34495e; border-radius: 6px; transition: width .3s, background .3s; }
+        .progress-fill.done { background: #27ae60; }
+
+        .section { margin-bottom: 20px; background: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #eaeaea; }
+        label { font-weight: bold; display: block; margin-bottom: 8px; color: #2c3e50; }
+        .hint { display: block; margin-top: 6px; color: #666; font-size: 12.5px; }
+        input[type="file"], input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; background: white; }
+        .upload-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .upload-row input[type="file"] { flex: 1; }
+        .btn-reset { padding: 10px 18px; border: 1px solid #e74c3c; color: #c0392b; background: white; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
+        .btn-reset:hover { background: #fdecea; }
+
+        #scanInput { font-size: 18px; padding: 14px; border: 2px solid #34495e; font-weight: 600; }
+        #scanInput:focus { outline: none; border-color: #27ae60; box-shadow: 0 0 0 3px rgba(39,174,96,.15); }
+
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 14px; vertical-align: middle; }
+        th { background-color: #2c3e50; color: white; white-space: nowrap; }
+        .completed { background-color: #e8f8f5; }
+        .completed td { color: #117a65; font-weight: bold; }
+        tr.over td { background-color: #fdf2e9; }
+        .qty-over { color: #c0392b; font-weight: bold; }
+        .input-barcode { width: 100%; padding: 4px 6px; font-size: 13px; border: 1px dashed #2980b9; border-radius: 4px; background: #fff; }
+        .input-barcode:focus { outline: none; border-style: solid; border-color: #2980b9; }
+
+        @keyframes flashOk { 0% { background-color: #abebc6; } 100% { background-color: transparent; } }
+        @keyframes flashBad { 0% { background-color: #f5b7b1; } 100% { background-color: transparent; } }
+        tr.flash-ok td { animation: flashOk 1.2s ease-out; }
+        tr.flash-bad td { animation: flashBad 1.2s ease-out; }
+
+        .scan-log { list-style: none; margin: 12px 0 0; padding: 0; font-size: 13px; }
+        .scan-log li { padding: 6px 10px; border-left: 4px solid #ccc; background: white; margin-bottom: 4px; border-radius: 0 6px 6px 0; }
+        .scan-log li.ok { border-color: #27ae60; }
+        .scan-log li.warn { border-color: #e67e22; }
+        .scan-log li.bad { border-color: #c0392b; }
+
+        .faktur-cell { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #5d6d7e; font-size: 12.5px; }
+
+        .faktur-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: white; border: 1px solid #e5e8ec; border-left: 4px solid #34495e; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; flex-wrap: wrap; }
+        .faktur-row.done { border-left-color: #27ae60; background: #f4fbf7; }
+        .faktur-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+        .faktur-name { font-weight: 700; color: #2c3e50; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .faktur-info { font-size: 12.5px; color: #7f8c8d; }
+        .faktur-side { display: flex; align-items: center; gap: 10px; }
+        .faktur-status { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 12px; white-space: nowrap; }
+        .st-done { background: #e8f8f5; color: #117a65; }
+        .st-progress { background: #fef9e7; color: #9a7d0a; }
+        .st-over { background: #fdebd0; color: #af601a; }
+        .faktur-del { border: 1px solid #e74c3c; color: #c0392b; background: white; border-radius: 6px; font-size: 12px; padding: 4px 10px; cursor: pointer; font-weight: 700; }
+        .faktur-del:hover { background: #fdecea; }
+
+        .hidden { display: none !important; }
+
+        @media (max-width: 640px) {
+            body { padding: 10px; }
+            .container { padding: 16px; }
+            #statusBox { font-size: 16px; padding: 14px; }
+            th, td { padding: 7px; font-size: 12.5px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="app-header">
+        <h2>Sistem Verifikasi Barcode Gudang PBF</h2>
+        <div class="format-badges">
+            <span class="badge badge-accurate">ACCURATE</span>
+            <span class="badge badge-ipos">iPOS</span>
+            <span class="badge badge-auto">MULTI-FAKTUR • DETEKSI OTOMATIS</span>
+        </div>
+    </div>
+
+    <div id="statusBox" class="bg-ready">Silakan unggah file Excel Faktur (Accurate / iPos)</div>
+
+    <div id="summaryBar" class="summary-bar hidden">
+        <div class="chip"><span class="chip-label">Faktur Lengkap</span><span class="chip-value" id="chipFaktur">0/0</span></div>
+        <div class="chip"><span class="chip-label">Item Lengkap</span><span class="chip-value" id="chipItems">0/0</span></div>
+        <div class="chip"><span class="chip-label">Qty Terkumpul</span><span class="chip-value" id="chipQty">0/0</span></div>
+        <div class="chip"><span class="chip-label">Mode Parser</span><span class="chip-value" id="chipMode">-</span></div>
+    </div>
+    <div id="progressTrack" class="progress-track hidden"><div id="progressFill" class="progress-fill"></div></div>
+
+    <div id="fakturPanel" class="section hidden">
+        <label>Daftar Faktur Dimuat <span id="fakturCount" style="color:#7f8c8d;font-weight:600;"></span></label>
+        <div id="fakturList"></div>
+        <small class="hint">Bisa menambah faktur lagi kapan saja. Jika barang yang sama muncul di beberapa faktur, scan akan mengisi faktur yang belum lengkap terlebih dahulu (urutan atas ke bawah).</small>
+    </div>
+
+    <div class="section">
+        <label>1. Unggah File Excel Faktur (.xls / .xlsx — bisa pilih beberapa file sekaligus)</label>
+        <div class="upload-row">
+            <input type="file" id="excelFile" accept=".xls, .xlsx" multiple onchange="handleExcelUpload(event)" onclick="this.value=''">
+            <button id="resetBtn" class="btn-reset hidden" onclick="resetInvoice()">Reset Semua Faktur</button>
+        </div>
+        <small class="hint">Tahan Ctrl saat memilih file untuk mengunggah banyak faktur sekaligus (mis. 5–10 faktur satu mitra digabung dalam satu sesi scan). Format Accurate / iPos dikenali otomatis. Halaman butuh internet saat pertama kali dibuka untuk memuat pustaka Excel.</small>
+    </div>
+
+    <div class="section">
+        <label>2. Kotak Pemindai (pastikan kursor aktif di sini, lalu scan barang)</label>
+        <input type="text" id="scanInput" placeholder="Scan Barcode atau Kd. Item di sini..." onkeypress="checkBarcode(event)" autofocus>
+        <small class="hint">Scanner menekan Enter secara otomatis — cukup arahkan dan tembak. Klik di area mana pun akan mengembalikan kursor ke kotak ini. Bisa memakai Barcode fisik maupun Kd. Item.</small>
+        <ul id="scanLog" class="scan-log hidden"></ul>
+    </div>
+
+    <div class="section">
+        <label>Progress Verifikasi Item</label>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:110px;">Kd. Item</th>
+                        <th style="width:180px;">Barcode Fisik (Alias)</th>
+                        <th>Nama Barang</th>
+                        <th style="width:140px;">Faktur</th>
+                        <th style="width:70px;">Target</th>
+                        <th style="width:95px;">Terkumpul</th>
+                        <th style="width:110px;">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="7" style="text-align:center;color:#888;">Belum ada data faktur yang dimuat.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ===================== STATE =====================
+    let invoiceItems = []; // { fid, fakturLabel, fakturShort, code, barcode, name, target, scanned }
+    let fakturList = [];   // { id, key, label, short, mode }
+    let loadedKeys = new Set(); // "nama:size" file yang sudah dimuat (anti duplikat)
+    let fakturSeq = 0;
+    let logEntries = [];
+
+    const els = {
+        statusBox: document.getElementById('statusBox'),
+        summaryBar: document.getElementById('summaryBar'),
+        chipMode: document.getElementById('chipMode'),
+        chipFaktur: document.getElementById('chipFaktur'),
+        chipItems: document.getElementById('chipItems'),
+        chipQty: document.getElementById('chipQty'),
+        progressTrack: document.getElementById('progressTrack'),
+        progressFill: document.getElementById('progressFill'),
+        excelFile: document.getElementById('excelFile'),
+        resetBtn: document.getElementById('resetBtn'),
+        fakturPanel: document.getElementById('fakturPanel'),
+        fakturList: document.getElementById('fakturList'),
+        fakturCount: document.getElementById('fakturCount'),
+        scanInput: document.getElementById('scanInput'),
+        scanLog: document.getElementById('scanLog'),
+        tableBody: document.getElementById('tableBody')
+    };
+
+    // ===================== SUARA =====================
+    // Suara Error menggunakan Base64 dari file MP3 "Astagfirullah" (diwarisi dari checker Accurate)
+    const customErrorAudio = new Audio("data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV");
+
+    function beep(freq, duration, volume, delay) {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const t0 = audioCtx.currentTime + (delay || 0);
+            osc.frequency.setValueAtTime(freq, t0);
+            gain.gain.setValueAtTime(volume || 0.1, t0);
+            osc.start(t0);
+            osc.stop(t0 + duration);
+        } catch (e) { console.log("Audio error:", e); }
+    }
+
+    function fallbackErrorSound() {
+        beep(200, 0.3, 0.3);
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance("Astagfirullah");
+            utterance.lang = 'id-ID';
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
+    function playSound(type) {
+        if (type === 'success') {
+            beep(600, 0.1);
+        } else if (type === 'complete') {
+            beep(600, 0.12, 0.12, 0);
+            beep(800, 0.12, 0.12, 0.15);
+            beep(1000, 0.25, 0.12, 0.3);
+        } else { // error
+            try {
+                customErrorAudio.currentTime = 0;
+                const p = customErrorAudio.play();
+                if (p && p.catch) p.catch(fallbackErrorSound);
+            } catch (e) {
+                fallbackErrorSound();
+            }
+        }
+    }
+
+    // ===== PARSER START =====
+    // Parser gabungan: mendeteksi header kolom (mendukung ekspor Accurate & iPos),
+    // dengan mode kompatibilitas fallback untuk ekspor Accurate tanpa header standar.
+    const HEADER_IGNORE_WORDS = ["pelanggan", "supplier", "pemasok", "customer", "vendor"];
+    const KODE_KEYS = ["kd. item", "kd item", "kode item", "kode barang", "kode", "sku"];
+    const NAMA_KEYS = ["nama item", "nama barang", "nama", "deskripsi"];
+    const QTY_KEYS = ["jml", "qty", "kuantitas", "jumlah"];
+    const IGNORE_PHRASES = [
+        "sub total", "total", "ppn", "diskon", "pajak", "biaya",
+        "jumlah item", "pot.", "periode", "laporan", "keseluruhan",
+        "alamat", "no transaksi", "dept."
+    ];
+
+    function cellText(v) { return String(v == null ? "" : v).trim(); }
+
+    function detectHeader(rows) {
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+
+            let tempKode = -1, tempBarcode = -1, tempNama = -1, tempQty = -1;
+
+            for (let j = 0; j < row.length; j++) {
+                const cell = cellText(row[j]).toLowerCase();
+                if (!cell) continue;
+
+                const isCustomerCol = HEADER_IGNORE_WORDS.some(w => cell.includes(w));
+                if (!isCustomerCol) {
+                    if (cell === "barcode" || cell === "bar code" || cell.includes("barcode")) {
+                        tempBarcode = j;
+                    } else if ((cell === "no." || cell === "no") || KODE_KEYS.some(k => cell === k || cell.includes(k))) {
+                        if (tempKode === -1) tempKode = j;
+                    }
+                    if (NAMA_KEYS.some(k => cell === k || cell.includes(k))) {
+                        if (tempNama === -1) tempNama = j;
+                    }
+                }
+
+                if (QTY_KEYS.some(k => cell === k || cell.includes(k))) {
+                    if (tempQty === -1) tempQty = j;
+                }
+            }
+
+            if (tempQty !== -1 && (tempNama !== -1 || tempKode !== -1 || tempBarcode !== -1)) {
+                return {
+                    headerRow: i,
+                    startIndex: i + 1,
+                    colKodeIdx: tempKode,
+                    colBarcodeIdx: tempBarcode,
+                    colNamaIdx: tempNama,
+                    colQtyIdx: tempQty
+                };
+            }
+        }
+        return null;
+    }
+
+    function parseInvoiceRows(rows) {
+        const header = detectHeader(rows);
+        const items = [];
+        let mode, colKodeIdx, colBarcodeIdx, colNamaIdx, colQtyIdx, start;
+
+        if (header) {
+            mode = "header";
+            colKodeIdx = header.colKodeIdx;
+            colBarcodeIdx = header.colBarcodeIdx;
+            colNamaIdx = header.colNamaIdx;
+            colQtyIdx = header.colQtyIdx;
+            start = header.startIndex;
+        } else if (rows.length > 5) {
+            // Mode kompatibilitas: layout tetap untuk ekspor Accurate tanpa header standar
+            mode = "fallback";
+            colKodeIdx = 2; colBarcodeIdx = -1; colNamaIdx = 1; colQtyIdx = 3;
+            start = 4;
+        } else {
+            return { items: [], mode: null, header: null };
+        }
+
+        for (let i = start; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+
+            let kode = colKodeIdx !== -1 ? cellText(row[colKodeIdx]) : "";
+            let barcode = colBarcodeIdx !== -1 ? cellText(row[colBarcodeIdx]) : "";
+            const nama = colNamaIdx !== -1 ? cellText(row[colNamaIdx]) : "";
+            const qtyRaw = colQtyIdx !== -1 ? row[colQtyIdx] : "";
+
+            const combined = (kode + " " + barcode + " " + nama).toLowerCase();
+            if (IGNORE_PHRASES.some(w => combined.includes(w))) continue;
+            if (!kode && !barcode && !nama) continue;
+
+            let qty = parseInt(qtyRaw, 10);
+            if (isNaN(qty) || qty <= 0) {
+                if (mode === "header") continue;
+                qty = 1; // fallback: baris tanpa qty dianggap 1 (perilaku checker Accurate)
+            }
+            if (!kode && nama) kode = "BARANG-" + (i + 1);
+
+            items.push({
+                code: kode,
+                barcode: barcode || kode, // default: pakai Kd. Item bila barcode kosong
+                name: nama || kode || barcode,
+                target: qty,
+                scanned: 0
+            });
+        }
+        return { items, mode, header };
+    }
+    // ===== PARSER END =====
+
+    // ===================== UPLOAD EXCEL (MULTI-FAKTUR) =====================
+    function handleExcelUpload(e) {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+
+        if (typeof XLSX === 'undefined') {
+            setStatus('PUSTAKA EXCEL BELUM TERMUAT — sambungkan internet lalu refresh halaman (F5).', 'error');
+            return;
+        }
+
+        let pending = files.length;
+        const addedFaktur = [];
+        const failedFiles = [];
+        const skippedFiles = [];
+        let addedItems = 0, addedQty = 0;
+
+        setStatus('MEMPROSES ' + files.length + ' FILE...', 'ready');
+
+        files.forEach((file) => {
+            const key = file.name + ':' + file.size;
+            if (loadedKeys.has(key)) {
+                skippedFiles.push(file.name);
+                finishOne();
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+
+                    // Satu file bisa berisi beberapa sheet faktur — parse semua sheet, ambil yang berisi item
+                    const sheetResults = [];
+                    workbook.SheetNames.forEach((sn) => {
+                        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sn], { header: 1 });
+                        const r = parseInvoiceRows(rows);
+                        if (r.items.length > 0) sheetResults.push({ sheetName: sn, mode: r.mode, items: r.items });
+                    });
+
+                    if (sheetResults.length === 0) {
+                        failedFiles.push(file.name);
+                    } else {
+                        loadedKeys.add(key);
+                        const multiSheet = sheetResults.length > 1;
+                        sheetResults.forEach((sr) => {
+                            fakturSeq++;
+                            const fid = 'F' + fakturSeq;
+                            const label = file.name + (multiSheet ? ' · ' + sr.sheetName : '');
+                            const short = file.name.replace(/\.(xlsx|xls)$/i, '') + (multiSheet ? ' · ' + sr.sheetName : '');
+                            sr.items.forEach((it) => {
+                                it.fid = fid;
+                                it.fakturLabel = label;
+                                it.fakturShort = short;
+                                invoiceItems.push(it);
+                            });
+                            addedQty += sr.items.reduce((s, it) => s + it.target, 0);
+                            addedFaktur.push({ id: fid, key, label, short, mode: sr.mode });
+                        });
+                        addedItems += sheetResults.reduce((s, sr) => s + sr.items.length, 0);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    failedFiles.push(file.name);
+                }
+                finishOne();
+            };
+            reader.onerror = function() {
+                failedFiles.push(file.name);
+                finishOne();
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function finishOne() {
+            pending--;
+            if (pending > 0) return;
+
+            els.excelFile.value = '';
+
+            if (addedFaktur.length > 0) {
+                els.resetBtn.classList.remove('hidden');
+                fakturList = fakturList.concat(addedFaktur);
+                refreshModeChip();
+                updateTable();
+                updateSummary();
+                renderFakturList();
+                let msg = addedFaktur.length + ' FAKTUR DIMUAT (' + addedItems + ' item, ' + addedQty + ' pcs)';
+                if (failedFiles.length) msg += ' — ' + failedFiles.length + ' FILE GAGAL';
+                if (skippedFiles.length) msg += ' — ' + skippedFiles.length + ' FILE GANDA DILEWATI';
+                setStatus(msg + '. SILAHKAN SCAN!', 'success');
+                els.scanInput.focus();
+                if (failedFiles.length) alert('File gagal dikenali:\n- ' + failedFiles.join('\n- ') + '\n\nPastikan file adalah ekspor faktur dari Accurate atau iPos.');
+                if (skippedFiles.length) alert('File sudah pernah dimuat sehingga dilewati:\n- ' + skippedFiles.join('\n- '));
+            } else {
+                updateTable();
+                updateSummary();
+                renderFakturList();
+                if (skippedFiles.length && !failedFiles.length) {
+                    setStatus('SEMUA FILE SUDAH PERNAH DIMUAT (DILEWATI). Unggah file lain, hapus faktur di daftar bila ingin memuat ulang, atau tekan Reset Semua Faktur.', 'warn');
+                    alert('File sudah pernah dimuat sehingga dilewati:\n- ' + skippedFiles.join('\n- ') + '\n\nUntuk memuat ulang file yang sama: hapus fakturnya dari "Daftar Faktur Dimuat" (tombol Hapus), atau tekan "Reset Semua Faktur".');
+                } else {
+                    setStatus('TIDAK ADA FILE YANG BERHASIL DIMUAT. Pastikan file adalah ekspor faktur Accurate / iPos.', 'error');
+                    alert('Tidak ada file yang berhasil dikenali.\nPastikan file yang diunggah adalah file ekspor dari Accurate atau iPos.');
+                }
+            }
+        }
+    }
+
+    function refreshModeChip() {
+        const modes = fakturList.map(f => f.mode);
+        const anyHeader = modes.includes('header');
+        const anyFallback = modes.includes('fallback');
+        els.chipMode.textContent = (anyHeader && anyFallback) ? 'Campuran (auto)' : (anyHeader ? 'Kolom otomatis' : (anyFallback ? 'Kompatibilitas' : '-'));
+        els.chipMode.title = 'Format kolom setiap file dideteksi otomatis (Accurate / iPos).';
+    }
+
+    function resetInvoice() {
+        if (fakturList.length > 0 && !confirm('Hapus SEMUA faktur yang sedang aktif (' + fakturList.length + ' faktur)?')) return;
+        invoiceItems = [];
+        fakturList = [];
+        loadedKeys.clear();
+        fakturSeq = 0;
+        logEntries = [];
+        els.scanLog.classList.add('hidden');
+        els.scanLog.innerHTML = '';
+        els.excelFile.value = '';
+        els.resetBtn.classList.add('hidden');
+        updateTable();
+        updateSummary();
+        renderFakturList();
+        setStatus('Silakan unggah file Excel Faktur (Accurate / iPos)', 'ready');
+        els.scanInput.focus();
+    }
+
+    function removeFaktur(fid) {
+        const f = fakturList.find(x => x.id === fid);
+        if (!f) return;
+        const its = invoiceItems.filter(it => it.fid === fid);
+        if (!confirm('Hapus faktur "' + (f.short || f.label) + '" beserta ' + its.length + ' itemnya?')) return;
+        invoiceItems = invoiceItems.filter(it => it.fid !== fid);
+        fakturList = fakturList.filter(x => x.id !== fid);
+        if (!fakturList.some(x => x.key === f.key)) loadedKeys.delete(f.key);
+        if (!fakturList.length) els.resetBtn.classList.add('hidden');
+        refreshModeChip();
+        updateTable();
+        updateSummary();
+        renderFakturList();
+        setStatus(fakturList.length
+            ? 'FAKTUR "' + (f.short || f.label) + '" DIHAPUS — sisa ' + fakturList.length + ' faktur. Lanjutkan scan.'
+            : 'Semua faktur dihapus. Silakan unggah file Excel Faktur (Accurate / iPos).', 'ready');
+        els.scanInput.focus();
+    }
+
+    function renderFakturList() {
+        if (!fakturList.length) {
+            els.fakturPanel.classList.add('hidden');
+            return;
+        }
+        els.fakturPanel.classList.remove('hidden');
+        els.fakturCount.textContent = '(' + fakturList.length + ' faktur)';
+        els.fakturList.innerHTML = '';
+        fakturList.forEach((f) => {
+            const its = invoiceItems.filter(it => it.fid === f.id);
+            const target = its.reduce((s, it) => s + it.target, 0);
+            const scanned = its.reduce((s, it) => s + it.scanned, 0);
+            const done = its.every(it => it.scanned >= it.target);
+            const over = its.some(it => it.scanned > it.target);
+            const div = document.createElement('div');
+            div.className = 'faktur-row' + (done ? ' done' : '');
+            div.innerHTML = `
+                <div class="faktur-main">
+                    <span class="faktur-name" title="${escAttr(f.label)}">${esc(f.short || f.label)}</span>
+                    <span class="faktur-info">${its.length} item • ${scanned}/${target} pcs</span>
+                </div>
+                <div class="faktur-side">
+                    <span class="faktur-status ${done ? (over ? 'st-over' : 'st-done') : 'st-progress'}">${done ? (over ? '✔ LEBIH' : '✔ LENGKAP') : '⏳ PROGRES'}</span>
+                    <button class="faktur-del" onclick="removeFaktur('${f.id}')">Hapus</button>
+                </div>`;
+            els.fakturList.appendChild(div);
+        });
+    }
+
+    // ===================== TAMPILAN =====================
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
+
+    function setStatus(message, type) {
+        els.statusBox.innerText = message;
+        els.statusBox.className = 'bg-' + type;
+    }
+
+    function updateTable(highlightIdx, highlightType) {
+        els.tableBody.innerHTML = '';
+        if (!invoiceItems.length) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td colspan="7" style="text-align:center;color:#888;">Belum ada data faktur yang dimuat.</td>';
+            els.tableBody.appendChild(tr);
+            return;
+        }
+
+        // Urutkan tampilan saja; indeks asli menjaga alias dan alokasi scan tetap benar.
+        const displayItems = invoiceItems.map((item, idx) => ({ item, idx }));
+        displayItems.sort((a, b) =>
+            Number(a.item.scanned >= a.item.target) - Number(b.item.scanned >= b.item.target)
+            || a.idx - b.idx
+        );
+
+        displayItems.forEach(({ item, idx }) => {
+            const isComplete = item.scanned >= item.target;
+            const isOver = item.scanned > item.target;
+            const tr = document.createElement('tr');
+            if (isComplete) tr.className = 'completed';
+            if (isOver) tr.classList.add('over');
+            if (highlightIdx === idx && highlightType) tr.classList.add(highlightType === 'ok' ? 'flash-ok' : 'flash-bad');
+
+            tr.innerHTML = `
+                <td>${esc(item.code) || '-'}</td>
+                <td>
+                    <input type="text" class="input-barcode" value="${escAttr(item.barcode)}"
+                           onchange="updateBarcodeAlias(${idx}, this.value)"
+                           onkeydown="aliasEnter(event)"
+                           placeholder="Ketik/Scan Barcode...">
+                </td>
+                <td>${esc(item.name)}</td>
+                <td class="faktur-cell" title="${escAttr(item.fakturLabel || '')}">${esc(item.fakturShort || '-')}</td>
+                <td>${item.target}</td>
+                <td class="${isOver ? 'qty-over' : ''}">${item.scanned}</td>
+                <td>${isOver ? '⚠ LEBIH' : (isComplete ? '✔ LENGKAP' : '⏳ BELUM')}</td>
+            `;
+            els.tableBody.appendChild(tr);
+        });
+    }
+
+    function updateSummary() {
+        if (!invoiceItems.length) {
+            els.summaryBar.classList.add('hidden');
+            els.progressTrack.classList.add('hidden');
+            return;
+        }
+        const completeItems = invoiceItems.filter(it => it.scanned >= it.target).length;
+        const totalTarget = invoiceItems.reduce((s, it) => s + it.target, 0);
+        const totalScanned = invoiceItems.reduce((s, it) => s + it.scanned, 0);
+        const doneFaktur = fakturList.filter(f =>
+            invoiceItems.filter(it => it.fid === f.id).every(it => it.scanned >= it.target)
+        ).length;
+
+        els.chipFaktur.textContent = doneFaktur + ' / ' + fakturList.length;
+        els.chipItems.textContent = completeItems + ' / ' + invoiceItems.length;
+        els.chipQty.textContent = totalScanned + ' / ' + totalTarget;
+        const pct = totalTarget > 0 ? Math.min(100, (totalScanned / totalTarget) * 100) : 0;
+        els.progressFill.style.width = pct + '%';
+        els.progressFill.classList.toggle('done', completeItems === invoiceItems.length);
+
+        els.summaryBar.classList.remove('hidden');
+        els.progressTrack.classList.remove('hidden');
+    }
+
+    function addLog(type, text) {
+        const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        logEntries.unshift({ type, text, time });
+        logEntries = logEntries.slice(0, 6);
+        els.scanLog.classList.remove('hidden');
+        els.scanLog.innerHTML = logEntries.map(en =>
+            '<li class="' + en.type + '"><b>' + en.time + '</b> — ' + esc(en.text) + '</li>'
+        ).join('');
+    }
+
+    function updateBarcodeAlias(idx, value) {
+        if (invoiceItems[idx]) invoiceItems[idx].barcode = value.trim();
+    }
+
+    function aliasEnter(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.target.blur();
+            els.scanInput.focus();
+        }
+    }
+
+    // ===================== SCAN BARCODE =====================
+    function checkBarcode(event) {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+
+        const inputField = els.scanInput;
+        const raw = inputField.value.trim();
+        inputField.value = '';
+
+        if (!raw) return;
+
+        if (!invoiceItems.length) {
+            playSound('error');
+            setStatus('BELUM ADA FAKTUR — unggah file Excel terlebih dahulu.', 'error');
+            return;
+        }
+
+        const scanned = raw.toUpperCase();
+        // Pencarian ganda: cocokkan Barcode Alias ATAU Kd. Item.
+        // Jika item muncul di beberapa baris faktur, isi yang belum lengkap terlebih dahulu.
+        const matches = invoiceItems.filter(it =>
+            (it.barcode && it.barcode.toUpperCase() === scanned) ||
+            (it.code && it.code.toUpperCase() === scanned)
+        );
+        const item = matches.find(it => it.scanned < it.target) || matches[0];
+        const idx = item ? invoiceItems.indexOf(item) : -1;
+
+        if (item) {
+            if (item.scanned < item.target) {
+                item.scanned++;
+                playSound('success');
+                const fDone = invoiceItems.filter(it => it.fid === item.fid).every(it => it.scanned >= it.target);
+                let msg = `BERHASIL: ${item.name} — ${item.fakturShort || 'faktur'} (${item.scanned}/${item.target})`;
+                if (fDone) msg += ' ✔ FAKTUR SELESAI';
+                setStatus(msg, 'success');
+                addLog('ok', `${item.code} — ${item.name} (${item.scanned}/${item.target})${fDone ? ' ✔ faktur selesai' : ''}`);
+                updateTable(idx, 'ok');
+                updateSummary();
+                renderFakturList();
+                if (invoiceItems.every(it => it.scanned >= it.target)) {
+                    playSound('complete');
+                    setStatus(`SEMUA ${fakturList.length} FAKTUR LENGKAP — VERIFIKASI SELESAI ✔`, 'success');
+                }
+            } else {
+                playSound('error');
+                setStatus(`PERINGATAN: ${item.name} — ${item.fakturShort || 'faktur'} SUDAH PAS / KELEBIHAN JUMLAH!`, 'warn');
+                addLog('warn', `${item.code} — kelebihan jumlah (${item.scanned}/${item.target})`);
+                updateTable(idx, 'bad');
+                updateSummary();
+                renderFakturList();
+            }
+        } else {
+            playSound('error');
+            setStatus(`GAGAL! KODE/BARCODE [${scanned}] TIDAK ADA DALAM FAKTUR INI!`, 'error');
+            addLog('bad', `${scanned} — tidak dikenal dalam faktur`);
+            updateTable(-1, null);
+            updateSummary();
+        }
+    }
+
+    // ===================== FOKUS OTOMATIS =====================
+    document.addEventListener('click', (e) => {
+        if (e.target.tagName !== 'INPUT' || e.target.id === 'scanInput') {
+            els.scanInput.focus();
+        }
+    });
+    window.addEventListener('load', () => els.scanInput.focus());
+</script>
+
+</body>
+</html><!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Verifikasi Barcode Gudang PBF — Accurate & iPos</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+
+        .app-header { text-align: center; margin-bottom: 20px; }
+        .app-header h2 { color: #2c3e50; margin: 0 0 10px; }
+        .format-badges { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+        .badge { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: .5px; }
+        .badge-accurate { background: #eaf2f8; color: #1f618d; border: 1px solid #aed6f1; }
+        .badge-ipos { background: #fef9e7; color: #9a7d0a; border: 1px solid #f7dc6f; }
+        .badge-auto { background: #e8f8f5; color: #117a65; border: 1px solid #a3e4d7; }
+
+        #statusBox { position: sticky; top: 10px; z-index: 50; padding: 20px; font-size: 20px; font-weight: bold; text-align: center; border-radius: 8px; margin-bottom: 20px; color: white; background: #7f8c8d; transition: background 0.3s; box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+        .bg-ready { background-color: #34495e !important; }
+        .bg-success { background-color: #27ae60 !important; }
+        .bg-warn { background-color: #e67e22 !important; }
+        .bg-error { background-color: #c0392b !important; }
+
+        .summary-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+        .chip { flex: 1; min-width: 150px; background: #f8f9fa; border: 1px solid #e5e8ec; border-radius: 10px; padding: 10px 14px; }
+        .chip-label { display: block; font-size: 11px; text-transform: uppercase; color: #7f8c8d; letter-spacing: .5px; margin-bottom: 2px; }
+        .chip-value { font-size: 19px; font-weight: 800; color: #2c3e50; }
+
+        .progress-track { height: 10px; background: #eaecee; border-radius: 6px; overflow: hidden; margin-bottom: 20px; }
+        .progress-fill { height: 100%; width: 0%; background: #34495e; border-radius: 6px; transition: width .3s, background .3s; }
+        .progress-fill.done { background: #27ae60; }
+
+        .section { margin-bottom: 20px; background: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #eaeaea; }
+        label { font-weight: bold; display: block; margin-bottom: 8px; color: #2c3e50; }
+        .hint { display: block; margin-top: 6px; color: #666; font-size: 12.5px; }
+        input[type="file"], input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 15px; background: white; }
+        .upload-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .upload-row input[type="file"] { flex: 1; }
+        .btn-reset { padding: 10px 18px; border: 1px solid #e74c3c; color: #c0392b; background: white; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
+        .btn-reset:hover { background: #fdecea; }
+
+        #scanInput { font-size: 18px; padding: 14px; border: 2px solid #34495e; font-weight: 600; }
+        #scanInput:focus { outline: none; border-color: #27ae60; box-shadow: 0 0 0 3px rgba(39,174,96,.15); }
+
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 14px; vertical-align: middle; }
+        th { background-color: #2c3e50; color: white; white-space: nowrap; }
+        .completed { background-color: #e8f8f5; }
+        .completed td { color: #117a65; font-weight: bold; }
+        tr.over td { background-color: #fdf2e9; }
+        .qty-over { color: #c0392b; font-weight: bold; }
+        .input-barcode { width: 100%; padding: 4px 6px; font-size: 13px; border: 1px dashed #2980b9; border-radius: 4px; background: #fff; }
+        .input-barcode:focus { outline: none; border-style: solid; border-color: #2980b9; }
+
+        @keyframes flashOk { 0% { background-color: #abebc6; } 100% { background-color: transparent; } }
+        @keyframes flashBad { 0% { background-color: #f5b7b1; } 100% { background-color: transparent; } }
+        tr.flash-ok td { animation: flashOk 1.2s ease-out; }
+        tr.flash-bad td { animation: flashBad 1.2s ease-out; }
+
+        .scan-log { list-style: none; margin: 12px 0 0; padding: 0; font-size: 13px; }
+        .scan-log li { padding: 6px 10px; border-left: 4px solid #ccc; background: white; margin-bottom: 4px; border-radius: 0 6px 6px 0; }
+        .scan-log li.ok { border-color: #27ae60; }
+        .scan-log li.warn { border-color: #e67e22; }
+        .scan-log li.bad { border-color: #c0392b; }
+
+        .faktur-cell { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #5d6d7e; font-size: 12.5px; }
+
+        .faktur-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: white; border: 1px solid #e5e8ec; border-left: 4px solid #34495e; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; flex-wrap: wrap; }
+        .faktur-row.done { border-left-color: #27ae60; background: #f4fbf7; }
+        .faktur-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+        .faktur-name { font-weight: 700; color: #2c3e50; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .faktur-info { font-size: 12.5px; color: #7f8c8d; }
+        .faktur-side { display: flex; align-items: center; gap: 10px; }
+        .faktur-status { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 12px; white-space: nowrap; }
+        .st-done { background: #e8f8f5; color: #117a65; }
+        .st-progress { background: #fef9e7; color: #9a7d0a; }
+        .st-over { background: #fdebd0; color: #af601a; }
+        .faktur-del { border: 1px solid #e74c3c; color: #c0392b; background: white; border-radius: 6px; font-size: 12px; padding: 4px 10px; cursor: pointer; font-weight: 700; }
+        .faktur-del:hover { background: #fdecea; }
+
+        .hidden { display: none !important; }
+
+        @media (max-width: 640px) {
+            body { padding: 10px; }
+            .container { padding: 16px; }
+            #statusBox { font-size: 16px; padding: 14px; }
+            th, td { padding: 7px; font-size: 12.5px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="app-header">
+        <h2>Sistem Verifikasi Barcode Gudang PBF</h2>
+        <div class="format-badges">
+            <span class="badge badge-accurate">ACCURATE</span>
+            <span class="badge badge-ipos">iPOS</span>
+            <span class="badge badge-auto">MULTI-FAKTUR • DETEKSI OTOMATIS</span>
+        </div>
+    </div>
+
+    <div id="statusBox" class="bg-ready">Silakan unggah file Excel Faktur (Accurate / iPos)</div>
+
+    <div id="summaryBar" class="summary-bar hidden">
+        <div class="chip"><span class="chip-label">Faktur Lengkap</span><span class="chip-value" id="chipFaktur">0/0</span></div>
+        <div class="chip"><span class="chip-label">Item Lengkap</span><span class="chip-value" id="chipItems">0/0</span></div>
+        <div class="chip"><span class="chip-label">Qty Terkumpul</span><span class="chip-value" id="chipQty">0/0</span></div>
+        <div class="chip"><span class="chip-label">Mode Parser</span><span class="chip-value" id="chipMode">-</span></div>
+    </div>
+    <div id="progressTrack" class="progress-track hidden"><div id="progressFill" class="progress-fill"></div></div>
+
+    <div id="fakturPanel" class="section hidden">
+        <label>Daftar Faktur Dimuat <span id="fakturCount" style="color:#7f8c8d;font-weight:600;"></span></label>
+        <div id="fakturList"></div>
+        <small class="hint">Bisa menambah faktur lagi kapan saja. Jika barang yang sama muncul di beberapa faktur, scan akan mengisi faktur yang belum lengkap terlebih dahulu (urutan atas ke bawah).</small>
+    </div>
+
+    <div class="section">
+        <label>1. Unggah File Excel Faktur (.xls / .xlsx — bisa pilih beberapa file sekaligus)</label>
+        <div class="upload-row">
+            <input type="file" id="excelFile" accept=".xls, .xlsx" multiple onchange="handleExcelUpload(event)" onclick="this.value=''">
+            <button id="resetBtn" class="btn-reset hidden" onclick="resetInvoice()">Reset Semua Faktur</button>
+        </div>
+        <small class="hint">Tahan Ctrl saat memilih file untuk mengunggah banyak faktur sekaligus (mis. 5–10 faktur satu mitra digabung dalam satu sesi scan). Format Accurate / iPos dikenali otomatis. Halaman butuh internet saat pertama kali dibuka untuk memuat pustaka Excel.</small>
+    </div>
+
+    <div class="section">
+        <label>2. Kotak Pemindai (pastikan kursor aktif di sini, lalu scan barang)</label>
+        <input type="text" id="scanInput" placeholder="Scan Barcode atau Kd. Item di sini..." onkeypress="checkBarcode(event)" autofocus>
+        <small class="hint">Scanner menekan Enter secara otomatis — cukup arahkan dan tembak. Klik di area mana pun akan mengembalikan kursor ke kotak ini. Bisa memakai Barcode fisik maupun Kd. Item.</small>
+        <ul id="scanLog" class="scan-log hidden"></ul>
+    </div>
+
+    <div class="section">
+        <label>Progress Verifikasi Item</label>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:110px;">Kd. Item</th>
+                        <th style="width:180px;">Barcode Fisik (Alias)</th>
+                        <th>Nama Barang</th>
+                        <th style="width:140px;">Faktur</th>
+                        <th style="width:70px;">Target</th>
+                        <th style="width:95px;">Terkumpul</th>
+                        <th style="width:110px;">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="7" style="text-align:center;color:#888;">Belum ada data faktur yang dimuat.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ===================== STATE =====================
+    let invoiceItems = []; // { fid, fakturLabel, fakturShort, code, barcode, name, target, scanned }
+    let fakturList = [];   // { id, key, label, short, mode }
+    let loadedKeys = new Set(); // "nama:size" file yang sudah dimuat (anti duplikat)
+    let fakturSeq = 0;
+    let logEntries = [];
+
+    const els = {
+        statusBox: document.getElementById('statusBox'),
+        summaryBar: document.getElementById('summaryBar'),
+        chipMode: document.getElementById('chipMode'),
+        chipFaktur: document.getElementById('chipFaktur'),
+        chipItems: document.getElementById('chipItems'),
+        chipQty: document.getElementById('chipQty'),
+        progressTrack: document.getElementById('progressTrack'),
+        progressFill: document.getElementById('progressFill'),
+        excelFile: document.getElementById('excelFile'),
+        resetBtn: document.getElementById('resetBtn'),
+        fakturPanel: document.getElementById('fakturPanel'),
+        fakturList: document.getElementById('fakturList'),
+        fakturCount: document.getElementById('fakturCount'),
+        scanInput: document.getElementById('scanInput'),
+        scanLog: document.getElementById('scanLog'),
+        tableBody: document.getElementById('tableBody')
+    };
+
+    // ===================== SUARA =====================
+    // Suara Error menggunakan Base64 dari file MP3 "Astagfirullah" (diwarisi dari checker Accurate)
+    const customErrorAudio = new Audio("data:audio/mp3;base64,//OExAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV");
+
+    function beep(freq, duration, volume, delay) {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            const t0 = audioCtx.currentTime + (delay || 0);
+            osc.frequency.setValueAtTime(freq, t0);
+            gain.gain.setValueAtTime(volume || 0.1, t0);
+            osc.start(t0);
+            osc.stop(t0 + duration);
+        } catch (e) { console.log("Audio error:", e); }
+    }
+
+    function fallbackErrorSound() {
+        beep(200, 0.3, 0.3);
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance("Astagfirullah");
+            utterance.lang = 'id-ID';
+            window.speechSynthesis.speak(utterance);
+        }
+    }
+
+    function playSound(type) {
+        if (type === 'success') {
+            beep(600, 0.1);
+        } else if (type === 'complete') {
+            beep(600, 0.12, 0.12, 0);
+            beep(800, 0.12, 0.12, 0.15);
+            beep(1000, 0.25, 0.12, 0.3);
+        } else { // error
+            try {
+                customErrorAudio.currentTime = 0;
+                const p = customErrorAudio.play();
+                if (p && p.catch) p.catch(fallbackErrorSound);
+            } catch (e) {
+                fallbackErrorSound();
+            }
+        }
+    }
+
+    // ===== PARSER START =====
+    // Parser gabungan: mendeteksi header kolom (mendukung ekspor Accurate & iPos),
+    // dengan mode kompatibilitas fallback untuk ekspor Accurate tanpa header standar.
+    const HEADER_IGNORE_WORDS = ["pelanggan", "supplier", "pemasok", "customer", "vendor"];
+    const KODE_KEYS = ["kd. item", "kd item", "kode item", "kode barang", "kode", "sku"];
+    const NAMA_KEYS = ["nama item", "nama barang", "nama", "deskripsi"];
+    const QTY_KEYS = ["jml", "qty", "kuantitas", "jumlah"];
+    const IGNORE_PHRASES = [
+        "sub total", "total", "ppn", "diskon", "pajak", "biaya",
+        "jumlah item", "pot.", "periode", "laporan", "keseluruhan",
+        "alamat", "no transaksi", "dept."
+    ];
+
+    function cellText(v) { return String(v == null ? "" : v).trim(); }
+
+    function detectHeader(rows) {
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+
+            let tempKode = -1, tempBarcode = -1, tempNama = -1, tempQty = -1;
+
+            for (let j = 0; j < row.length; j++) {
+                const cell = cellText(row[j]).toLowerCase();
+                if (!cell) continue;
+
+                const isCustomerCol = HEADER_IGNORE_WORDS.some(w => cell.includes(w));
+                if (!isCustomerCol) {
+                    if (cell === "barcode" || cell === "bar code" || cell.includes("barcode")) {
+                        tempBarcode = j;
+                    } else if ((cell === "no." || cell === "no") || KODE_KEYS.some(k => cell === k || cell.includes(k))) {
+                        if (tempKode === -1) tempKode = j;
+                    }
+                    if (NAMA_KEYS.some(k => cell === k || cell.includes(k))) {
+                        if (tempNama === -1) tempNama = j;
+                    }
+                }
+
+                if (QTY_KEYS.some(k => cell === k || cell.includes(k))) {
+                    if (tempQty === -1) tempQty = j;
+                }
+            }
+
+            if (tempQty !== -1 && (tempNama !== -1 || tempKode !== -1 || tempBarcode !== -1)) {
+                return {
+                    headerRow: i,
+                    startIndex: i + 1,
+                    colKodeIdx: tempKode,
+                    colBarcodeIdx: tempBarcode,
+                    colNamaIdx: tempNama,
+                    colQtyIdx: tempQty
+                };
+            }
+        }
+        return null;
+    }
+
+    function parseInvoiceRows(rows) {
+        const header = detectHeader(rows);
+        const items = [];
+        let mode, colKodeIdx, colBarcodeIdx, colNamaIdx, colQtyIdx, start;
+
+        if (header) {
+            mode = "header";
+            colKodeIdx = header.colKodeIdx;
+            colBarcodeIdx = header.colBarcodeIdx;
+            colNamaIdx = header.colNamaIdx;
+            colQtyIdx = header.colQtyIdx;
+            start = header.startIndex;
+        } else if (rows.length > 5) {
+            // Mode kompatibilitas: layout tetap untuk ekspor Accurate tanpa header standar
+            mode = "fallback";
+            colKodeIdx = 2; colBarcodeIdx = -1; colNamaIdx = 1; colQtyIdx = 3;
+            start = 4;
+        } else {
+            return { items: [], mode: null, header: null };
+        }
+
+        for (let i = start; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row || row.length === 0) continue;
+
+            let kode = colKodeIdx !== -1 ? cellText(row[colKodeIdx]) : "";
+            let barcode = colBarcodeIdx !== -1 ? cellText(row[colBarcodeIdx]) : "";
+            const nama = colNamaIdx !== -1 ? cellText(row[colNamaIdx]) : "";
+            const qtyRaw = colQtyIdx !== -1 ? row[colQtyIdx] : "";
+
+            const combined = (kode + " " + barcode + " " + nama).toLowerCase();
+            if (IGNORE_PHRASES.some(w => combined.includes(w))) continue;
+            if (!kode && !barcode && !nama) continue;
+
+            let qty = parseInt(qtyRaw, 10);
+            if (isNaN(qty) || qty <= 0) {
+                if (mode === "header") continue;
+                qty = 1; // fallback: baris tanpa qty dianggap 1 (perilaku checker Accurate)
+            }
+            if (!kode && nama) kode = "BARANG-" + (i + 1);
+
+            items.push({
+                code: kode,
+                barcode: barcode || kode, // default: pakai Kd. Item bila barcode kosong
+                name: nama || kode || barcode,
+                target: qty,
+                scanned: 0
+            });
+        }
+        return { items, mode, header };
+    }
+    // ===== PARSER END =====
+
+    // ===================== UPLOAD EXCEL (MULTI-FAKTUR) =====================
+    function handleExcelUpload(e) {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+
+        if (typeof XLSX === 'undefined') {
+            setStatus('PUSTAKA EXCEL BELUM TERMUAT — sambungkan internet lalu refresh halaman (F5).', 'error');
+            return;
+        }
+
+        let pending = files.length;
+        const addedFaktur = [];
+        const failedFiles = [];
+        const skippedFiles = [];
+        let addedItems = 0, addedQty = 0;
+
+        setStatus('MEMPROSES ' + files.length + ' FILE...', 'ready');
+
+        files.forEach((file) => {
+            const key = file.name + ':' + file.size;
+            if (loadedKeys.has(key)) {
+                skippedFiles.push(file.name);
+                finishOne();
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const data = new Uint8Array(event.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+
+                    // Satu file bisa berisi beberapa sheet faktur — parse semua sheet, ambil yang berisi item
+                    const sheetResults = [];
+                    workbook.SheetNames.forEach((sn) => {
+                        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sn], { header: 1 });
+                        const r = parseInvoiceRows(rows);
+                        if (r.items.length > 0) sheetResults.push({ sheetName: sn, mode: r.mode, items: r.items });
+                    });
+
+                    if (sheetResults.length === 0) {
+                        failedFiles.push(file.name);
+                    } else {
+                        loadedKeys.add(key);
+                        const multiSheet = sheetResults.length > 1;
+                        sheetResults.forEach((sr) => {
+                            fakturSeq++;
+                            const fid = 'F' + fakturSeq;
+                            const label = file.name + (multiSheet ? ' · ' + sr.sheetName : '');
+                            const short = file.name.replace(/\.(xlsx|xls)$/i, '') + (multiSheet ? ' · ' + sr.sheetName : '');
+                            sr.items.forEach((it) => {
+                                it.fid = fid;
+                                it.fakturLabel = label;
+                                it.fakturShort = short;
+                                invoiceItems.push(it);
+                            });
+                            addedQty += sr.items.reduce((s, it) => s + it.target, 0);
+                            addedFaktur.push({ id: fid, key, label, short, mode: sr.mode });
+                        });
+                        addedItems += sheetResults.reduce((s, sr) => s + sr.items.length, 0);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    failedFiles.push(file.name);
+                }
+                finishOne();
+            };
+            reader.onerror = function() {
+                failedFiles.push(file.name);
+                finishOne();
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function finishOne() {
+            pending--;
+            if (pending > 0) return;
+
+            els.excelFile.value = '';
+
+            if (addedFaktur.length > 0) {
+                els.resetBtn.classList.remove('hidden');
+                fakturList = fakturList.concat(addedFaktur);
+                refreshModeChip();
+                updateTable();
+                updateSummary();
+                renderFakturList();
+                let msg = addedFaktur.length + ' FAKTUR DIMUAT (' + addedItems + ' item, ' + addedQty + ' pcs)';
+                if (failedFiles.length) msg += ' — ' + failedFiles.length + ' FILE GAGAL';
+                if (skippedFiles.length) msg += ' — ' + skippedFiles.length + ' FILE GANDA DILEWATI';
+                setStatus(msg + '. SILAHKAN SCAN!', 'success');
+                els.scanInput.focus();
+                if (failedFiles.length) alert('File gagal dikenali:\n- ' + failedFiles.join('\n- ') + '\n\nPastikan file adalah ekspor faktur dari Accurate atau iPos.');
+                if (skippedFiles.length) alert('File sudah pernah dimuat sehingga dilewati:\n- ' + skippedFiles.join('\n- '));
+            } else {
+                updateTable();
+                updateSummary();
+                renderFakturList();
+                if (skippedFiles.length && !failedFiles.length) {
+                    setStatus('SEMUA FILE SUDAH PERNAH DIMUAT (DILEWATI). Unggah file lain, hapus faktur di daftar bila ingin memuat ulang, atau tekan Reset Semua Faktur.', 'warn');
+                    alert('File sudah pernah dimuat sehingga dilewati:\n- ' + skippedFiles.join('\n- ') + '\n\nUntuk memuat ulang file yang sama: hapus fakturnya dari "Daftar Faktur Dimuat" (tombol Hapus), atau tekan "Reset Semua Faktur".');
+                } else {
+                    setStatus('TIDAK ADA FILE YANG BERHASIL DIMUAT. Pastikan file adalah ekspor faktur Accurate / iPos.', 'error');
+                    alert('Tidak ada file yang berhasil dikenali.\nPastikan file yang diunggah adalah file ekspor dari Accurate atau iPos.');
+                }
+            }
+        }
+    }
+
+    function refreshModeChip() {
+        const modes = fakturList.map(f => f.mode);
+        const anyHeader = modes.includes('header');
+        const anyFallback = modes.includes('fallback');
+        els.chipMode.textContent = (anyHeader && anyFallback) ? 'Campuran (auto)' : (anyHeader ? 'Kolom otomatis' : (anyFallback ? 'Kompatibilitas' : '-'));
+        els.chipMode.title = 'Format kolom setiap file dideteksi otomatis (Accurate / iPos).';
+    }
+
+    function resetInvoice() {
+        if (fakturList.length > 0 && !confirm('Hapus SEMUA faktur yang sedang aktif (' + fakturList.length + ' faktur)?')) return;
+        invoiceItems = [];
+        fakturList = [];
+        loadedKeys.clear();
+        fakturSeq = 0;
+        logEntries = [];
+        els.scanLog.classList.add('hidden');
+        els.scanLog.innerHTML = '';
+        els.excelFile.value = '';
+        els.resetBtn.classList.add('hidden');
+        updateTable();
+        updateSummary();
+        renderFakturList();
+        setStatus('Silakan unggah file Excel Faktur (Accurate / iPos)', 'ready');
+        els.scanInput.focus();
+    }
+
+    function removeFaktur(fid) {
+        const f = fakturList.find(x => x.id === fid);
+        if (!f) return;
+        const its = invoiceItems.filter(it => it.fid === fid);
+        if (!confirm('Hapus faktur "' + (f.short || f.label) + '" beserta ' + its.length + ' itemnya?')) return;
+        invoiceItems = invoiceItems.filter(it => it.fid !== fid);
+        fakturList = fakturList.filter(x => x.id !== fid);
+        if (!fakturList.some(x => x.key === f.key)) loadedKeys.delete(f.key);
+        if (!fakturList.length) els.resetBtn.classList.add('hidden');
+        refreshModeChip();
+        updateTable();
+        updateSummary();
+        renderFakturList();
+        setStatus(fakturList.length
+            ? 'FAKTUR "' + (f.short || f.label) + '" DIHAPUS — sisa ' + fakturList.length + ' faktur. Lanjutkan scan.'
+            : 'Semua faktur dihapus. Silakan unggah file Excel Faktur (Accurate / iPos).', 'ready');
+        els.scanInput.focus();
+    }
+
+    function renderFakturList() {
+        if (!fakturList.length) {
+            els.fakturPanel.classList.add('hidden');
+            return;
+        }
+        els.fakturPanel.classList.remove('hidden');
+        els.fakturCount.textContent = '(' + fakturList.length + ' faktur)';
+        els.fakturList.innerHTML = '';
+        fakturList.forEach((f) => {
+            const its = invoiceItems.filter(it => it.fid === f.id);
+            const target = its.reduce((s, it) => s + it.target, 0);
+            const scanned = its.reduce((s, it) => s + it.scanned, 0);
+            const done = its.every(it => it.scanned >= it.target);
+            const over = its.some(it => it.scanned > it.target);
+            const div = document.createElement('div');
+            div.className = 'faktur-row' + (done ? ' done' : '');
+            div.innerHTML = `
+                <div class="faktur-main">
+                    <span class="faktur-name" title="${escAttr(f.label)}">${esc(f.short || f.label)}</span>
+                    <span class="faktur-info">${its.length} item • ${scanned}/${target} pcs</span>
+                </div>
+                <div class="faktur-side">
+                    <span class="faktur-status ${done ? (over ? 'st-over' : 'st-done') : 'st-progress'}">${done ? (over ? '✔ LEBIH' : '✔ LENGKAP') : '⏳ PROGRES'}</span>
+                    <button class="faktur-del" onclick="removeFaktur('${f.id}')">Hapus</button>
+                </div>`;
+            els.fakturList.appendChild(div);
+        });
+    }
+
+    // ===================== TAMPILAN =====================
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function escAttr(s) { return esc(s).replace(/"/g, '&quot;'); }
+
+    function setStatus(message, type) {
+        els.statusBox.innerText = message;
+        els.statusBox.className = 'bg-' + type;
+    }
+
+    function updateTable(highlightIdx, highlightType) {
+        els.tableBody.innerHTML = '';
+        if (!invoiceItems.length) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td colspan="7" style="text-align:center;color:#888;">Belum ada data faktur yang dimuat.</td>';
+            els.tableBody.appendChild(tr);
+            return;
+        }
+
+        // Urutkan tampilan saja; indeks asli menjaga alias dan alokasi scan tetap benar.
+        const displayItems = invoiceItems.map((item, idx) => ({ item, idx }));
+        displayItems.sort((a, b) =>
+            Number(a.item.scanned >= a.item.target) - Number(b.item.scanned >= b.item.target)
+            || a.idx - b.idx
+        );
+
+        displayItems.forEach(({ item, idx }) => {
+            const isComplete = item.scanned >= item.target;
+            const isOver = item.scanned > item.target;
+            const tr = document.createElement('tr');
+            if (isComplete) tr.className = 'completed';
+            if (isOver) tr.classList.add('over');
+            if (highlightIdx === idx && highlightType) tr.classList.add(highlightType === 'ok' ? 'flash-ok' : 'flash-bad');
+
+            tr.innerHTML = `
+                <td>${esc(item.code) || '-'}</td>
+                <td>
+                    <input type="text" class="input-barcode" value="${escAttr(item.barcode)}"
+                           onchange="updateBarcodeAlias(${idx}, this.value)"
+                           onkeydown="aliasEnter(event)"
+                           placeholder="Ketik/Scan Barcode...">
+                </td>
+                <td>${esc(item.name)}</td>
+                <td class="faktur-cell" title="${escAttr(item.fakturLabel || '')}">${esc(item.fakturShort || '-')}</td>
+                <td>${item.target}</td>
+                <td class="${isOver ? 'qty-over' : ''}">${item.scanned}</td>
+                <td>${isOver ? '⚠ LEBIH' : (isComplete ? '✔ LENGKAP' : '⏳ BELUM')}</td>
+            `;
+            els.tableBody.appendChild(tr);
+        });
+    }
+
+    function updateSummary() {
+        if (!invoiceItems.length) {
+            els.summaryBar.classList.add('hidden');
+            els.progressTrack.classList.add('hidden');
+            return;
+        }
+        const completeItems = invoiceItems.filter(it => it.scanned >= it.target).length;
+        const totalTarget = invoiceItems.reduce((s, it) => s + it.target, 0);
+        const totalScanned = invoiceItems.reduce((s, it) => s + it.scanned, 0);
+        const doneFaktur = fakturList.filter(f =>
+            invoiceItems.filter(it => it.fid === f.id).every(it => it.scanned >= it.target)
+        ).length;
+
+        els.chipFaktur.textContent = doneFaktur + ' / ' + fakturList.length;
+        els.chipItems.textContent = completeItems + ' / ' + invoiceItems.length;
+        els.chipQty.textContent = totalScanned + ' / ' + totalTarget;
+        const pct = totalTarget > 0 ? Math.min(100, (totalScanned / totalTarget) * 100) : 0;
+        els.progressFill.style.width = pct + '%';
+        els.progressFill.classList.toggle('done', completeItems === invoiceItems.length);
+
+        els.summaryBar.classList.remove('hidden');
+        els.progressTrack.classList.remove('hidden');
+    }
+
+    function addLog(type, text) {
+        const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        logEntries.unshift({ type, text, time });
+        logEntries = logEntries.slice(0, 6);
+        els.scanLog.classList.remove('hidden');
+        els.scanLog.innerHTML = logEntries.map(en =>
+            '<li class="' + en.type + '"><b>' + en.time + '</b> — ' + esc(en.text) + '</li>'
+        ).join('');
+    }
+
+    function updateBarcodeAlias(idx, value) {
+        if (invoiceItems[idx]) invoiceItems[idx].barcode = value.trim();
+    }
+
+    function aliasEnter(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            e.target.blur();
+            els.scanInput.focus();
+        }
+    }
+
+    // ===================== SCAN BARCODE =====================
+    function checkBarcode(event) {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+
+        const inputField = els.scanInput;
+        const raw = inputField.value.trim();
+        inputField.value = '';
+
+        if (!raw) return;
+
+        if (!invoiceItems.length) {
+            playSound('error');
+            setStatus('BELUM ADA FAKTUR — unggah file Excel terlebih dahulu.', 'error');
+            return;
+        }
+
+        const scanned = raw.toUpperCase();
+        // Pencarian ganda: cocokkan Barcode Alias ATAU Kd. Item.
+        // Jika item muncul di beberapa baris faktur, isi yang belum lengkap terlebih dahulu.
+        const matches = invoiceItems.filter(it =>
+            (it.barcode && it.barcode.toUpperCase() === scanned) ||
+            (it.code && it.code.toUpperCase() === scanned)
+        );
+        const item = matches.find(it => it.scanned < it.target) || matches[0];
+        const idx = item ? invoiceItems.indexOf(item) : -1;
+
+        if (item) {
+            if (item.scanned < item.target) {
+                item.scanned++;
+                playSound('success');
+                const fDone = invoiceItems.filter(it => it.fid === item.fid).every(it => it.scanned >= it.target);
+                let msg = `BERHASIL: ${item.name} — ${item.fakturShort || 'faktur'} (${item.scanned}/${item.target})`;
+                if (fDone) msg += ' ✔ FAKTUR SELESAI';
+                setStatus(msg, 'success');
+                addLog('ok', `${item.code} — ${item.name} (${item.scanned}/${item.target})${fDone ? ' ✔ faktur selesai' : ''}`);
+                updateTable(idx, 'ok');
+                updateSummary();
+                renderFakturList();
+                if (invoiceItems.every(it => it.scanned >= it.target)) {
+                    playSound('complete');
+                    setStatus(`SEMUA ${fakturList.length} FAKTUR LENGKAP — VERIFIKASI SELESAI ✔`, 'success');
+                }
+            } else {
+                playSound('error');
+                setStatus(`PERINGATAN: ${item.name} — ${item.fakturShort || 'faktur'} SUDAH PAS / KELEBIHAN JUMLAH!`, 'warn');
+                addLog('warn', `${item.code} — kelebihan jumlah (${item.scanned}/${item.target})`);
+                updateTable(idx, 'bad');
+                updateSummary();
+                renderFakturList();
+            }
+        } else {
+            playSound('error');
+            setStatus(`GAGAL! KODE/BARCODE [${scanned}] TIDAK ADA DALAM FAKTUR INI!`, 'error');
+            addLog('bad', `${scanned} — tidak dikenal dalam faktur`);
+            updateTable(-1, null);
+            updateSummary();
+        }
+    }
+
+    // ===================== FOKUS OTOMATIS =====================
+    document.addEventListener('click', (e) => {
+        if (e.target.tagName !== 'INPUT' || e.target.id === 'scanInput') {
+            els.scanInput.focus();
+        }
+    });
+    window.addEventListener('load', () => els.scanInput.focus());
+</script>
+
+</body>
+</html>
